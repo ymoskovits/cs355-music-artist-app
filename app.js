@@ -65,25 +65,50 @@ let server = http.createServer((req,res)=>{
 		const credentials = JSON.parse(credentials_json);
 		const post_data = {
 			"client_id" : credentials['client_id'],
-			"client_secret" : credentials["client_secret"],
-			"grant_type" : "client_credentials"
+			"client_secret" : credentials['client_secret'],
+			"grant_type" : 'client_credentials'
 		};
-		let stringified_post_data = querystring.stringify(post_data);
 
-		const options = {
-			hostname: 'https://accounts.spotify.com/api/token',
-			method: 'POST',
-			headers: {
-				'Content-Type' : 'application/x-www-form-urlencoded',
-				'Content-Length' : stringified_post_data.length
-			}
+		let stringified_post_data = querystring.stringify(post_data);
+		let hexString = credentials['client_id']+ ':' + credentials['client_secret'];
+		console.log(hexString);
+		hexString = stringified_post_data;
+		let base64String = Buffer.from(hexString, 'hex').toString('base64')
+		console.log(base64String + "STRING");
+
+		let authOptions = {
+		  url: 'https://accounts.spotify.com/api/token',
+		  headers: {
+		  	'Content-Type' : 'application/x-www-form-urlencoded',
+		    'Authorization': base64String,
+		    'grant_type' : 'client_credentials'
+		  },
+		  form: {
+		    grant_type: 'client_credentials'
+		  },
+		  method: 'POST',
+		  json: true
 		};
+
+		// const options = {
+		// 	protocol: 'https:',
+		// 	hostname: 'accounts.spotify.com/api/token',
+		// 	method: 'POST',
+		// 	grant_type: "client_credentials",
+		// 	headers: {
+		// 		'Content-Type' : 'application/x-www-form-urlencoded',
+		// 		'Content-Length' : stringified_post_data.length,
+		// 		'Authorization' : b64encoded
+		// 	}
+		// };
 
 		let request_sent_time = new Date();
-		let authentication_req = https.request(options, authentication_res => {
+		let user_input = parsed_url;
+		let authentication_req = https.request('https://accounts.spotify.com/api/token', authOptions, authentication_res => {
 			recieved_authentication(authentication_res, res, user_input, request_sent_time);
 		});
 		authentication_req.on('error', err => {
+			console.log("IN\nside\nerror\nfunction");
 			console.error(err);
 		});
 		authentication_req.write(stringified_post_data);
@@ -114,14 +139,24 @@ function recieved_authentication(authentication_res, res, user_input, request_se
 	authentication_res.on("data", data => {body += data;});
 	authentication_res.on("end", () => {
 		let authentication_res_data = JSON.parse(body);
+				console.log(request_sent_time);
+
+		authentication_res_data.expiration = request_sent_time;
+		authentication_res_data.expiration.setHours(authentication_res_data.expiration.getHours() + 1);
+		console.log(authentication_res_data);
+
+		console.log(body);
 		create_cache(authentication_res_data);
 		create_search_req(authentication_res_data, res, user_input, request_sent_time);
 	});
 }
 
-
-
-
+function create_cache(authentication_res_data){
+	fs.writeFile('./auth/authentication_res.json', JSON.stringify(authentication_res_data), err => {
+		if (err) throw err;
+		console.log("Authentication Cached");
+	});
+}
 
 
 
