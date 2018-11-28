@@ -4,7 +4,6 @@ const fs = require('fs');
 const url = require('url');
 const querystring = require('querystring');
 
-
 const server_address = 'localhost';
 const port = 3000;
 
@@ -16,7 +15,6 @@ let server = http.createServer((req,res)=>{
 	if(ext === "/"){
 		res.writeHead(200,{'Content-Type':'text/html'});
 		html_stream.pipe(res);
-		// res.end("GOT 1");
 	}
 	else if(ext.includes("/favicon.ico")){
 		console.log("favicon case");
@@ -49,19 +47,10 @@ let server = http.createServer((req,res)=>{
 			res.write(data);
 			res.end();
 		});
-		// if(fs.existsSync('.' + req.url)){
-		// 	res.writeHead(200,{'Content-Type':'image/jpeg'});
 
-		// 	console.log("exists");
-		// }
-		// else{
-
-		// }
-		// res.end("GOT artists");
 	}
 	else if(ext.includes("/search")){
 		let parsed_url = url.parse(req.url ,true);
-		console.log(parsed_url);
 		const credentials_json = fs.readFileSync('./auth/credentials.json', 'utf8');
 		const credentials = JSON.parse(credentials_json);
 		const post_data = {
@@ -71,10 +60,7 @@ let server = http.createServer((req,res)=>{
 		};
 
 		let stringified_post_data = querystring.stringify(post_data);
-		// let hexString = credentials['client_id']+ ':' + credentials['client_secret'];
-		hexString = stringified_post_data;
-		let base64String = Buffer.from(hexString, 'hex').toString('base64')
-		console.log("BASE 64 String : " + base64String);
+		let base64String = Buffer.from(stringified_post_data, 'hex').toString('base64')
 
 		let authOptions = {
 		  url: 'https://accounts.spotify.com/api/token',
@@ -90,20 +76,9 @@ let server = http.createServer((req,res)=>{
 		  json: true
 		};
 
-		// const options = {
-		// 	protocol: 'https:',
-		// 	hostname: 'accounts.spotify.com/api/token',
-		// 	method: 'POST',
-		// 	grant_type: "client_credentials",
-		// 	headers: {
-		// 		'Content-Type' : 'application/x-www-form-urlencoded',
-		// 		'Content-Length' : stringified_post_data.length,
-		// 		'Authorization' : b64encoded
-		// 	}
-		// };
+
 		let cache_valid = false;
 		let user_input = parsed_url;
-
 		if(fs.existsSync('./auth/authentication_res.json')){
 			let content = fs.readFileSync('./auth/authentication_res.json', 'utf8');
 			let cached_auth = JSON.parse(content);
@@ -133,20 +108,12 @@ let server = http.createServer((req,res)=>{
 			console.log("requesting token");
 			authentication_req.end();
 		}
-
-
-		
-		res.end("A SERACH");
 	}
 	else{
 		res.writeHead(404);
 		res.end();
 
 	}
-	// res.writeHead(200,{'Content-Type':'text/html'});
-	// console.log(req.url);
-	// num.pipe(res);
-
 });
 
 console.log('Now listening on port ' + port);
@@ -191,9 +158,7 @@ function create_search_req(authentication_res_data, res, user_input, request_sen
 
 
 	let options = {
-		// url : 'api.spotify.com', ///v1/search?' + querystring.stringify(query),
 		headers: {
-			// 'Content-Type' : 'application/x-www-form-urlencoded',
 			'Authorization' : 'Bearer ' + authentication_res_data.access_token.toString(),
 			'Accept' : "application/json",
 			'Content-Type' : "application/json"
@@ -206,73 +171,63 @@ function create_search_req(authentication_res_data, res, user_input, request_sen
 	
 	let url = 'https://api.spotify.com/v1/search?' + querystring.stringify(query); //querystring.stringify(user_input);
 	console.log(url);
-	let search_req = https.get(url, options, artist_data_callback); // (res) => {
+	let search_req = https.get(url, options, (search_res_data) => {
+		artist_data_callback(search_res_data, res);
+	}); 
 
-
-
-// let data = '';
-// res.setEncoding('utf8');
-// response.on('data', function(d) {
-//   data += d
-// })
-// response.on('end', function(d) {
-//   // res.send(data)
-// })
-
-
-
-
-
-	// 	console.log(data);
-	// 	console.log("CALLback line 193"); // this should do with the input something
-	// });
-	// console.log(search_req);
 	search_req.on('error', err => {
-		console.log("INSIDE ERROR");
 		console.log(err);
-		console.log("OUTSIDE ERROR");
-
 	});
-	// console.log(search_req);
 }
 
-
-function artist_data_callback(res){
-	res.setEncoding('utf8');
+/*
+	Here we get the response from spotify.
+	We want to use the url to request the image.
+	Store that image and read it back to the user.
+*/
+function artist_data_callback(search_res_data, res){
+	search_res_data.setEncoding('utf8');
 	let rawData = '';
-  	res.on('data', (chunk) => { rawData += chunk; });
-  	res.on('end', () => {
+  	search_res_data.on('data', (chunk) => { rawData += chunk; });
+  	search_res_data.on('end', () => {
 	  	try {
 	      const parsedData = JSON.parse(rawData);
 	      console.log(parsedData);
-	    } catch (e) {
+	      let image_name = parsedData.artists.items[0].name;
+	      let image_genres = parsedData.artists.items[0].genres;
+	      let image_url = parsedData.artists.items[0].images[0].url;
+	      let image_req = https.get(image_url, image_res =>{
+	      	store_and_write_image(image_res, image_name, image_genres, res);
+
+	      });
+	      console.log(image_url);
+	    }
+	    catch (e) {
 	      console.error(e.message);
 	    }
   });
 }
 
+function store_and_write_image(image_res, name, genres, res){
+	let title = name;
+	name = name.replace(/ /g,'').toLowerCase();
+	let new_image = fs.createWriteStream('./artists/' + name + '.jpg', {'encoding' : null});
+	image_res.pipe(new_image);
+	new_image.on('finish', () => {
+		let webpage = `<h1> ${title} </h1> <p> ${genres.join()} </p> <img src="./artists/${name}.jpg" /> ` ;
+		res.write(webpage);
+		res.end();
+		console.log("Finishedddddd")
+	});
 
-
-
-// const http = require('http');
-// const fs = require('fs');
-
-// const server_address = 'localhost';
-// const port = 3000;
-
-// let html_stream = fs.createReadStream('./assets/index.html','utf8');
-
-// let server = http.createServer((req,res)=>{
-// 	console.log(`A new request was made from ${req.connection.remoteAddress} for ${req.url}`);
-// 	res.writeHead(200,{'Content-Type':'text/html'});
-// 	html_stream.pipe(res);
-// });
-
-// console.log('Now listening on port ' + port);
-// server.listen(port,server_address);
-
-
-
+	if(fs.existsSync('./artists/' + name + '.jpg')){
+		let image_to_write = fs.readFileSync('./artists/' + name + '.jpg', {'Content-Type' : 'image/jpeg'});
+		console.log("EXISTSSSS");
+	}
+	else{
+		console.log("DOESNT EXISTSSSS");
+	}	
+}
 
 
 
