@@ -47,6 +47,7 @@ let server = http.createServer((req,res)=>{
 			}
 			res.writeHead(200, {'Content-Type' : 'image/jpeg'});
 			res.write(data);
+			res.end();
 		});
 		// if(fs.existsSync('.' + req.url)){
 		// 	res.writeHead(200,{'Content-Type':'image/jpeg'});
@@ -70,11 +71,10 @@ let server = http.createServer((req,res)=>{
 		};
 
 		let stringified_post_data = querystring.stringify(post_data);
-		let hexString = credentials['client_id']+ ':' + credentials['client_secret'];
-		console.log(hexString);
+		// let hexString = credentials['client_id']+ ':' + credentials['client_secret'];
 		hexString = stringified_post_data;
 		let base64String = Buffer.from(hexString, 'hex').toString('base64')
-		console.log(base64String + "STRING");
+		console.log("BASE 64 String : " + base64String);
 
 		let authOptions = {
 		  url: 'https://accounts.spotify.com/api/token',
@@ -101,20 +101,42 @@ let server = http.createServer((req,res)=>{
 		// 		'Authorization' : b64encoded
 		// 	}
 		// };
-
-		let request_sent_time = new Date();
+		let cache_valid = false;
 		let user_input = parsed_url;
-		let authentication_req = https.request('https://accounts.spotify.com/api/token', authOptions, authentication_res => {
-			recieved_authentication(authentication_res, res, user_input, request_sent_time);
-		});
-		authentication_req.on('error', err => {
-			console.log("IN\nside\nerror\nfunction");
-			console.error(err);
-		});
-		authentication_req.write(stringified_post_data);
-		console.log("requesting token");
-		authentication_req.end();
-		//res.end("A SERACH");
+
+		if(fs.existsSync('./auth/authentication_res.json')){
+			let content = fs.readFileSync('./auth/authentication_res.json', 'utf8');
+			let cached_auth = JSON.parse(content);
+			if(new Date(cached_auth.expiration) > Date.now()){
+				console.log("Token Valid");
+				cache_valid = true;
+				create_search_req(cached_auth, res, user_input);
+			}
+			else{
+				console.log("Token Expired");
+			}
+		}
+		if(cache_valid){
+			
+		}
+		else{
+			let request_sent_time = new Date();
+			let user_input = parsed_url;
+			let authentication_req = https.request('https://accounts.spotify.com/api/token', authOptions, authentication_res => {
+				recieved_authentication(authentication_res, res, user_input, request_sent_time);
+			});
+			authentication_req.on('error', err => {
+				console.log("IN\nside\nerror\nfunction");
+				console.error(err);
+			});
+			authentication_req.write(stringified_post_data);
+			console.log("requesting token");
+			authentication_req.end();
+		}
+
+
+		
+		res.end("A SERACH");
 	}
 	else{
 		res.writeHead(404);
@@ -158,9 +180,76 @@ function create_cache(authentication_res_data){
 	});
 }
 
+function create_search_req(authentication_res_data, res, user_input, request_sent_time){
+	let query = {
+		q: user_input.query['artist'],
+		type: 'artist'
+	}
+	console.log("Creatign search request");
+	console.log(user_input);
+	console.log(authentication_res_data);
+
+
+	let options = {
+		// url : 'api.spotify.com', ///v1/search?' + querystring.stringify(query),
+		headers: {
+			// 'Content-Type' : 'application/x-www-form-urlencoded',
+			'Authorization' : 'Bearer ' + authentication_res_data.access_token.toString(),
+			'Accept' : "application/json",
+			'Content-Type' : "application/json"
+		},
+		path: '/v1/search?' + querystring.stringify(query),
+
+		host: 'api.spotify.com'
+	};
+	console.log(options);
+	
+	let url = 'https://api.spotify.com/v1/search?' + querystring.stringify(query); //querystring.stringify(user_input);
+	console.log(url);
+	let search_req = https.get(url, options, artist_data_callback); // (res) => {
 
 
 
+// let data = '';
+// res.setEncoding('utf8');
+// response.on('data', function(d) {
+//   data += d
+// })
+// response.on('end', function(d) {
+//   // res.send(data)
+// })
+
+
+
+
+
+	// 	console.log(data);
+	// 	console.log("CALLback line 193"); // this should do with the input something
+	// });
+	// console.log(search_req);
+	search_req.on('error', err => {
+		console.log("INSIDE ERROR");
+		console.log(err);
+		console.log("OUTSIDE ERROR");
+
+	});
+	// console.log(search_req);
+}
+
+
+function artist_data_callback(res){
+	res.setEncoding('utf8');
+	let rawData = '';
+  	res.on('data', (chunk) => { rawData += chunk; });
+  	res.on('end', () => {
+	  	try {
+	      const parsedData = JSON.parse(rawData);
+	      console.log(parsedData);
+	    } catch (e) {
+	      console.error(e.message);
+	    }
+  });
+}
 
 
 
