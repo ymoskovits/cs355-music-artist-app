@@ -7,9 +7,11 @@ const querystring = require('querystring');
 const server_address = 'localhost';
 const port = 3000;
 
-let html_stream = fs.createReadStream('./html/search-form.html', 'utf8');
+let html_streaml = fs.createReadStream('./html/search-form.html', 'utf8');
 
 let server = http.createServer((req,res)=>{
+	let html_stream = fs.createReadStream('./html/search-form.html', 'utf8');
+
 	console.log(`A new request was made from ${req.connection.remoteAddress} for ${req.url}`);
 	let ext = req.url;
 	if(ext === "/"){
@@ -50,6 +52,7 @@ let server = http.createServer((req,res)=>{
 
 	}
 	else if(ext.includes("/search")){
+		console.log(req.url);
 		let parsed_url = url.parse(req.url ,true);
 		const credentials_json = fs.readFileSync('./auth/credentials.json', 'utf8');
 		const credentials = JSON.parse(credentials_json);
@@ -196,9 +199,18 @@ function artist_data_callback(search_res_data, res){
 	      let image_name = parsedData.artists.items[0].name;
 	      let image_genres = parsedData.artists.items[0].genres;
 	      let image_url = parsedData.artists.items[0].images[0].url;
+	      let name = image_name.replace(/ /g,'').toLowerCase();
+	      if(fs.existsSync('./artists/' + name + '.jpg')){
+	      	let webpage = `<h1> ${image_name} </h1> <p> ${image_genres.join()} </p> <img src="./artists/${name}.jpg" /> ` ;
+			res.write(webpage);
+			return res.end();
+	      }
 	      let image_req = https.get(image_url, image_res =>{
 	      	store_and_write_image(image_res, image_name, image_genres, res);
 
+	      });
+	      image_req.on('error', err => {
+	      	console.log(e);
 	      });
 	      console.log(image_url);
 	    }
